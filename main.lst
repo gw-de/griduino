@@ -1,0 +1,755 @@
+   1               		.file	"main.c"
+   2               	__SP_H__ = 0x3e
+   3               	__SP_L__ = 0x3d
+   4               	__SREG__ = 0x3f
+   5               	__tmp_reg__ = 0
+   6               	__zero_reg__ = 1
+   8               		.text
+   9               	.Ltext0:
+ 103               	.global	numberToDisplay
+ 105               	numberToDisplay:
+   1:main.c        **** #include <avr/io.h>
+   2:main.c        **** #include <avr/interrupt.h>
+   3:main.c        **** 
+   4:main.c        **** 
+   5:main.c        **** //defining variables
+   6:main.c        **** //
+   7:main.c        **** //array for every possible output
+   8:main.c        **** unsigned char ziffern[2][11] = {{0x02, 0x9E, 0x24, 0x0C, 0x98, 0x48, 0x40, 0x1E, 0x00, 0x08, 0xFF},
+   9:main.c        **** unsigned char disp1 = 0x00;           //showing all at startup
+  10:main.c        **** unsigned char disp2 = 0x01;           //showing all at startup
+  11:main.c        **** unsigned char blueLED = 1;            //0 = LOW; 1 = HIGH, for values under 50Hz, ON AT STARTUP
+  12:main.c        **** unsigned char redLED = 1;             //0 = LOW; 1 = HIGH, for over 100mHz difference, ON AT STARTU
+  13:main.c        **** unsigned char seconds = 5;            //timeframe for measuring
+  14:main.c        **** unsigned char mux = 0;                //variable for toggling displays
+  15:main.c        **** unsigned int  edges_counter;          //counter for rising edges
+  16:main.c        **** unsigned long counter;                //a global variable used as counter/timer
+  17:main.c        **** float         temp;                   //variable for calculation
+  18:main.c        **** 
+  19:main.c        **** 
+  20:main.c        **** //function to display numbers
+  21:main.c        **** void numberToDisplay(int x){
+ 107               	.LM0:
+ 108               	.LFBB1:
+ 109               	/* prologue: function */
+ 110               	/* frame size = 0 */
+ 111               	/* stack size = 0 */
+ 112               	.L__stack_usage = 0
+ 113 0000 9C01      		movw r18,r24
+  22:main.c        ****   //check if x is over 100
+  23:main.c        ****   if (x >= 100){
+ 115               	.LM1:
+ 116 0002 8436      		cpi r24,100
+ 117 0004 9105      		cpc r25,__zero_reg__
+ 118 0006 04F0      		brlt .L2
+  24:main.c        ****     redLED = 1;   //set red LED
+ 120               	.LM2:
+ 121 0008 81E0      		ldi r24,lo8(1)
+ 122 000a 8093 0000 		sts redLED,r24
+  25:main.c        ****     x -= 100;     //cut the 3rd digit (100) off
+ 124               	.LM3:
+ 125 000e 2456      		subi r18,100
+ 126 0010 3109      		sbc r19,__zero_reg__
+ 127 0012 00C0      		rjmp .L3
+ 128               	.L2:
+  26:main.c        ****   }
+  27:main.c        ****   else{
+  28:main.c        ****     redLED = 0;   //if not over 100 reset red LED to off
+ 130               	.LM4:
+ 131 0014 1092 0000 		sts redLED,__zero_reg__
+ 132               	.L3:
+ 133               	.LBB2:
+  29:main.c        ****   }
+  30:main.c        **** 
+  31:main.c        **** 
+  32:main.c        ****   //number for display 1
+  33:main.c        ****   //for loop counting down from 9 to 0
+  34:main.c        ****   for(int i = 9; i >= 0; i--){
+ 135               	.LM5:
+ 136 0018 E9E0      		ldi r30,lo8(9)
+ 137 001a F0E0      		ldi r31,0
+ 138               	.L6:
+ 139 001c CF01      		movw r24,r30
+ 140 001e 0196      		adiw r24,1
+ 141 0020 6AE0      		ldi r22,lo8(10)
+ 142 0022 70E0      		ldi r23,0
+ 143 0024 00D0      		rcall __mulhi3
+  35:main.c        ****       //true if x is less than i*10+10 (e.g. 9*10+10=100 for i=9) and greater/equals than i*10 (e.g
+  36:main.c        ****       if(x < i*10+10 && x >= i*10){
+ 145               	.LM6:
+ 146 0026 2817      		cp r18,r24
+ 147 0028 3907      		cpc r19,r25
+ 148 002a 04F4      		brge .L4
+ 149 002c 0A97      		sbiw r24,10
+ 151               	.LM7:
+ 152 002e 2817      		cp r18,r24
+ 153 0030 3907      		cpc r19,r25
+ 154 0032 04F0      		brlt .L4
+  37:main.c        ****           //if true save digit with value of i to display 1
+  38:main.c        ****           disp1 = ziffern[0][i];
+ 156               	.LM8:
+ 157 0034 DF01      		movw r26,r30
+ 158 0036 A050      		subi r26,lo8(-(ziffern))
+ 159 0038 B040      		sbci r27,hi8(-(ziffern))
+ 160 003a 8C91      		ld r24,X
+ 161 003c 8093 0000 		sts disp1,r24
+  39:main.c        ****           //cut 2nd digit off
+  40:main.c        ****           x -= i*10;
+ 163               	.LM9:
+ 164 0040 CF01      		movw r24,r30
+ 165 0042 66EF      		ldi r22,lo8(-10)
+ 166 0044 7FEF      		ldi r23,lo8(-1)
+ 167 0046 00D0      		rcall __mulhi3
+ 168 0048 280F      		add r18,r24
+ 169 004a 391F      		adc r19,r25
+  41:main.c        ****           //correct digit found, then break the loop
+  42:main.c        ****           break;
+ 171               	.LM10:
+ 172 004c 00C0      		rjmp .L5
+ 173               	.L4:
+  34:main.c        ****       //true if x is less than i*10+10 (e.g. 9*10+10=100 for i=9) and greater/equals than i*10 (e.g
+ 175               	.LM11:
+ 176 004e 3197      		sbiw r30,1
+ 177 0050 00F4      		brcc .L6
+ 178               	.L5:
+ 179               	.LBE2:
+  43:main.c        ****       }
+  44:main.c        ****   }
+  45:main.c        **** 
+  46:main.c        ****   //number for display 2
+  47:main.c        ****   //check if rest value equals 0
+  48:main.c        ****   if(x==0){
+ 181               	.LM12:
+ 182 0052 2115      		cp r18,__zero_reg__
+ 183 0054 3105      		cpc r19,__zero_reg__
+ 184 0056 01F4      		brne .L10
+  49:main.c        ****       disp2 = ziffern[1][0];
+ 186               	.LM13:
+ 187 0058 8091 0000 		lds r24,ziffern+11
+ 188 005c 00C0      		rjmp .L13
+ 189               	.L10:
+ 190 005e E9E0      		ldi r30,lo8(9)
+ 191 0060 F0E0      		ldi r31,0
+ 192               	.L7:
+ 193               	.LBB3:
+  50:main.c        ****   }
+  51:main.c        ****   else{
+  52:main.c        ****       //for loop counting down from 9 to 1
+  53:main.c        ****       for(int i = 9; i > 0; i--) {
+  54:main.c        ****           //if x equals i the modulo will give 0
+  55:main.c        ****           if(x % i == 0){
+ 195               	.LM14:
+ 196 0062 C901      		movw r24,r18
+ 197 0064 BF01      		movw r22,r30
+ 198 0066 00D0      		rcall __divmodhi4
+ 199 0068 892B      		or r24,r25
+ 200 006a 01F4      		brne .L9
+  56:main.c        ****               //assign the value of i to display 2
+  57:main.c        ****               disp2 = ziffern[1][i];
+ 202               	.LM15:
+ 203 006c E050      		subi r30,lo8(-(ziffern))
+ 204 006e F040      		sbci r31,hi8(-(ziffern))
+ 205 0070 8385      		ldd r24,Z+11
+ 206               	.L13:
+ 207 0072 8093 0000 		sts disp2,r24
+  58:main.c        ****               //correct digit found, then break the loop
+  59:main.c        ****               break;
+ 209               	.LM16:
+ 210 0076 0895      		ret
+ 211               	.L9:
+  53:main.c        ****           //if x equals i the modulo will give 0
+ 213               	.LM17:
+ 214 0078 3197      		sbiw r30,1
+ 215 007a 01F4      		brne .L7
+ 216 007c 0895      		ret
+ 217               	.LBE3:
+ 225               	.Lscope1:
+ 227               	.global	Multiplexer
+ 229               	Multiplexer:
+  60:main.c        ****           }
+  61:main.c        ****       }
+  62:main.c        ****   }
+  63:main.c        **** }
+  64:main.c        **** 
+  65:main.c        **** 
+  66:main.c        **** //function for multiplexer
+  67:main.c        **** void Multiplexer (void){
+ 231               	.LM18:
+ 232               	.LFBB2:
+ 233               	/* prologue: function */
+ 234               	/* frame size = 0 */
+ 235               	/* stack size = 0 */
+ 236               	.L__stack_usage = 0
+  68:main.c        ****   //at mux = 0 and if blueLED is set turn on blue LED, skipped when blueLED is off
+  69:main.c        ****   if(mux == 0 && blueLED == 1){
+ 238               	.LM19:
+ 239 007e 8091 0000 		lds r24,mux
+ 240 0082 8111      		cpse r24,__zero_reg__
+ 241 0084 00C0      		rjmp .L16
+ 243               	.LM20:
+ 244 0086 8091 0000 		lds r24,blueLED
+ 245 008a 8130      		cpi r24,lo8(1)
+ 246 008c 01F4      		brne .L17
+  70:main.c        ****       PORTA = 0xAC;
+ 248               	.LM21:
+ 249 008e 8CEA      		ldi r24,lo8(-84)
+ 250 0090 8BBB      		out 0x1b,r24
+  71:main.c        ****       PORTA |= 0x80;
+ 252               	.LM22:
+ 253 0092 DF9A      		sbi 0x1b,7
+  72:main.c        ****       PORTA &= ~0x10;
+ 255               	.LM23:
+ 256 0094 DC98      		cbi 0x1b,4
+ 257 0096 00C0      		rjmp .L18
+ 258               	.L16:
+  73:main.c        ****   }
+  74:main.c        ****   //at mux = 1 show display 1
+  75:main.c        ****   else if (mux == 1){
+ 260               	.LM24:
+ 261 0098 8130      		cpi r24,lo8(1)
+ 262 009a 01F4      		brne .L19
+  76:main.c        ****       PORTA = disp1;
+ 264               	.LM25:
+ 265 009c 8091 0000 		lds r24,disp1
+ 266 00a0 00C0      		rjmp .L20
+ 267               	.L19:
+  77:main.c        ****   }
+  78:main.c        ****   //at mux = 2 and if redLED is set turn on red LED, skipped when redLED is off
+  79:main.c        ****   else if(mux == 2 && redLED == 1){
+ 269               	.LM26:
+ 270 00a2 8230      		cpi r24,lo8(2)
+ 271 00a4 01F4      		brne .L17
+ 273               	.LM27:
+ 274 00a6 8091 0000 		lds r24,redLED
+ 275 00aa 8130      		cpi r24,lo8(1)
+ 276 00ac 01F4      		brne .L17
+  80:main.c        ****       PORTA = 0x28;
+ 278               	.LM28:
+ 279 00ae 88E2      		ldi r24,lo8(40)
+ 280 00b0 8BBB      		out 0x1b,r24
+  81:main.c        ****       PORTA |= 0x20;
+ 282               	.LM29:
+ 283 00b2 DD9A      		sbi 0x1b,5
+  82:main.c        ****       PORTA &= ~0x04;
+ 285               	.LM30:
+ 286 00b4 DA98      		cbi 0x1b,2
+ 287 00b6 00C0      		rjmp .L18
+ 288               	.L17:
+  83:main.c        ****   }
+  84:main.c        ****   //else (so if mux = 4) show display 2
+  85:main.c        ****   else{
+  86:main.c        ****       PORTA = disp2;
+ 290               	.LM31:
+ 291 00b8 8091 0000 		lds r24,disp2
+ 292               	.L20:
+ 293 00bc 8BBB      		out 0x1b,r24
+ 294               	.L18:
+  87:main.c        ****   }
+  88:main.c        **** 
+  89:main.c        ****   //multiplexer counting up and keeping from 0 to 3
+  90:main.c        ****   mux++;
+ 296               	.LM32:
+ 297 00be 8091 0000 		lds r24,mux
+ 298 00c2 8F5F      		subi r24,lo8(-(1))
+  91:main.c        ****   mux%=4;
+ 300               	.LM33:
+ 301 00c4 8370      		andi r24,lo8(3)
+ 302 00c6 8093 0000 		sts mux,r24
+ 303 00ca 0895      		ret
+ 305               	.Lscope2:
+ 306               	.global	__floatunsisf
+ 307               	.global	__mulsf3
+ 308               	.global	__divsf3
+ 309               	.global	__ltsf2
+ 310               	.global	__subsf3
+ 311               	.global	__fixsfsi
+ 313               	.global	calculateMeasurement
+ 315               	calculateMeasurement:
+  92:main.c        **** }
+  93:main.c        **** 
+  94:main.c        **** 
+  95:main.c        **** //function for calculation and setting blue LED
+  96:main.c        **** int calculateMeasurement (void){
+ 317               	.LM34:
+ 318               	.LFBB3:
+ 319 00cc CF92      		push r12
+ 320 00ce DF92      		push r13
+ 321 00d0 EF92      		push r14
+ 322 00d2 FF92      		push r15
+ 323               	/* prologue: function */
+ 324               	/* frame size = 0 */
+ 325               	/* stack size = 4 */
+ 326               	.L__stack_usage = 4
+  97:main.c        ****   //calculating real frequency, if counter is over ideal the resulting frequency is less than 50
+  98:main.c        ****   temp = 50.0 * 1600.0 * (float)seconds / (float) counter;
+ 328               	.LM35:
+ 329 00d4 6091 0000 		lds r22,seconds
+ 330 00d8 70E0      		ldi r23,0
+ 331 00da 80E0      		ldi r24,0
+ 332 00dc 90E0      		ldi r25,0
+ 333 00de 00D0      		rcall __floatunsisf
+ 334 00e0 20E0      		ldi r18,0
+ 335 00e2 30E4      		ldi r19,lo8(64)
+ 336 00e4 4CE9      		ldi r20,lo8(-100)
+ 337 00e6 57E4      		ldi r21,lo8(71)
+ 338 00e8 00D0      		rcall __mulsf3
+ 339 00ea 6B01      		movw r12,r22
+ 340 00ec 7C01      		movw r14,r24
+ 341 00ee 6091 0000 		lds r22,counter
+ 342 00f2 7091 0000 		lds r23,counter+1
+ 343 00f6 8091 0000 		lds r24,counter+2
+ 344 00fa 9091 0000 		lds r25,counter+3
+ 345 00fe 00D0      		rcall __floatunsisf
+ 346 0100 9B01      		movw r18,r22
+ 347 0102 AC01      		movw r20,r24
+ 348 0104 C701      		movw r24,r14
+ 349 0106 B601      		movw r22,r12
+ 350 0108 00D0      		rcall __divsf3
+ 351 010a 6B01      		movw r12,r22
+ 352 010c 7C01      		movw r14,r24
+  99:main.c        **** 
+ 100:main.c        ****   //if less than ideal 50Hz set blueLED and calculate difference up to 50
+ 101:main.c        ****   if (temp < 50.0){
+ 354               	.LM36:
+ 355 010e 20E0      		ldi r18,0
+ 356 0110 30E0      		ldi r19,0
+ 357 0112 48E4      		ldi r20,lo8(72)
+ 358 0114 52E4      		ldi r21,lo8(66)
+ 359 0116 00D0      		rcall __ltsf2
+ 360 0118 87FF      		sbrs r24,7
+ 361 011a 00C0      		rjmp .L26
+ 102:main.c        ****     blueLED = 1;
+ 363               	.LM37:
+ 364 011c 81E0      		ldi r24,lo8(1)
+ 365 011e 8093 0000 		sts blueLED,r24
+ 103:main.c        ****     temp = 50.0 - temp;
+ 367               	.LM38:
+ 368 0122 A701      		movw r20,r14
+ 369 0124 9601      		movw r18,r12
+ 370 0126 60E0      		ldi r22,0
+ 371 0128 70E0      		ldi r23,0
+ 372 012a 88E4      		ldi r24,lo8(72)
+ 373 012c 92E4      		ldi r25,lo8(66)
+ 374 012e 00C0      		rjmp .L27
+ 375               	.L26:
+ 104:main.c        ****   }
+ 105:main.c        ****   //else reset blueLED and calculate difference from 50
+ 106:main.c        ****   else{
+ 107:main.c        ****     blueLED = 0;
+ 377               	.LM39:
+ 378 0130 1092 0000 		sts blueLED,__zero_reg__
+ 108:main.c        ****     temp = temp - 50.0;
+ 380               	.LM40:
+ 381 0134 20E0      		ldi r18,0
+ 382 0136 30E0      		ldi r19,0
+ 383 0138 48E4      		ldi r20,lo8(72)
+ 384 013a 52E4      		ldi r21,lo8(66)
+ 385 013c C701      		movw r24,r14
+ 386 013e B601      		movw r22,r12
+ 387               	.L27:
+ 388 0140 00D0      		rcall __subsf3
+ 389 0142 6093 0000 		sts temp,r22
+ 390 0146 7093 0000 		sts temp+1,r23
+ 391 014a 8093 0000 		sts temp+2,r24
+ 392 014e 9093 0000 		sts temp+3,r25
+ 109:main.c        ****   }
+ 110:main.c        **** 
+ 111:main.c        ****   //convert to mHz
+ 112:main.c        ****   temp *= 1000.0;
+ 394               	.LM41:
+ 395 0152 20E0      		ldi r18,0
+ 396 0154 30E0      		ldi r19,0
+ 397 0156 4AE7      		ldi r20,lo8(122)
+ 398 0158 54E4      		ldi r21,lo8(68)
+ 399 015a 6091 0000 		lds r22,temp
+ 400 015e 7091 0000 		lds r23,temp+1
+ 401 0162 8091 0000 		lds r24,temp+2
+ 402 0166 9091 0000 		lds r25,temp+3
+ 403 016a 00D0      		rcall __mulsf3
+ 404 016c 6093 0000 		sts temp,r22
+ 405 0170 7093 0000 		sts temp+1,r23
+ 406 0174 8093 0000 		sts temp+2,r24
+ 407 0178 9093 0000 		sts temp+3,r25
+ 113:main.c        **** 
+ 114:main.c        ****   //reset edge counter and time counter
+ 115:main.c        ****   edges_counter = 0;
+ 409               	.LM42:
+ 410 017c 1092 0000 		sts edges_counter+1,__zero_reg__
+ 411 0180 1092 0000 		sts edges_counter,__zero_reg__
+ 116:main.c        ****   counter = 0;
+ 413               	.LM43:
+ 414 0184 1092 0000 		sts counter,__zero_reg__
+ 415 0188 1092 0000 		sts counter+1,__zero_reg__
+ 416 018c 1092 0000 		sts counter+2,__zero_reg__
+ 417 0190 1092 0000 		sts counter+3,__zero_reg__
+ 117:main.c        **** 
+ 118:main.c        ****   //cast to int and return to showing
+ 119:main.c        ****   return (int)temp;
+ 419               	.LM44:
+ 420 0194 00D0      		rcall __fixsfsi
+ 120:main.c        **** }
+ 422               	.LM45:
+ 423 0196 CB01      		movw r24,r22
+ 424               	/* epilogue start */
+ 425 0198 FF90      		pop r15
+ 426 019a EF90      		pop r14
+ 427 019c DF90      		pop r13
+ 428 019e CF90      		pop r12
+ 429 01a0 0895      		ret
+ 431               	.Lscope3:
+ 433               	.global	__vector_1
+ 435               	__vector_1:
+ 121:main.c        **** 
+ 122:main.c        **** 
+ 123:main.c        **** //is called every time an edge is detected on the input
+ 124:main.c        **** ISR(INT0_vect){
+ 437               	.LM46:
+ 438               	.LFBB4:
+ 439 01a2 1F92      		push r1
+ 440 01a4 0F92      		push r0
+ 441 01a6 0FB6      		in r0,__SREG__
+ 442 01a8 0F92      		push r0
+ 443 01aa 1124      		clr __zero_reg__
+ 444 01ac 2F93      		push r18
+ 445 01ae 3F93      		push r19
+ 446 01b0 4F93      		push r20
+ 447 01b2 5F93      		push r21
+ 448 01b4 6F93      		push r22
+ 449 01b6 7F93      		push r23
+ 450 01b8 8F93      		push r24
+ 451 01ba 9F93      		push r25
+ 452 01bc AF93      		push r26
+ 453 01be BF93      		push r27
+ 454 01c0 EF93      		push r30
+ 455 01c2 FF93      		push r31
+ 456               	/* prologue: Signal */
+ 457               	/* frame size = 0 */
+ 458               	/* stack size = 15 */
+ 459               	.L__stack_usage = 15
+ 125:main.c        ****   //count edges
+ 126:main.c        ****   edges_counter++;
+ 461               	.LM47:
+ 462 01c4 2091 0000 		lds r18,edges_counter
+ 463 01c8 3091 0000 		lds r19,edges_counter+1
+ 464 01cc 2F5F      		subi r18,-1
+ 465 01ce 3F4F      		sbci r19,-1
+ 466 01d0 3093 0000 		sts edges_counter+1,r19
+ 467 01d4 2093 0000 		sts edges_counter,r18
+ 127:main.c        **** 
+ 128:main.c        ****   //after x seconds calculate the output
+ 129:main.c        ****   if (edges_counter == 100*seconds) {
+ 469               	.LM48:
+ 470 01d8 8091 0000 		lds r24,seconds
+ 471 01dc 90E0      		ldi r25,0
+ 472 01de 64E6      		ldi r22,lo8(100)
+ 473 01e0 70E0      		ldi r23,0
+ 474 01e2 00D0      		rcall __mulhi3
+ 475 01e4 2817      		cp r18,r24
+ 476 01e6 3907      		cpc r19,r25
+ 477 01e8 01F4      		brne .L28
+ 130:main.c        ****      numberToDisplay(calculateMeasurement());
+ 479               	.LM49:
+ 480 01ea 00D0      		rcall calculateMeasurement
+ 481 01ec 00D0      		rcall numberToDisplay
+ 131:main.c        **** 
+ 132:main.c        ****      //reset the calculation value
+ 133:main.c        ****      temp = 0.0;
+ 483               	.LM50:
+ 484 01ee 1092 0000 		sts temp,__zero_reg__
+ 485 01f2 1092 0000 		sts temp+1,__zero_reg__
+ 486 01f6 1092 0000 		sts temp+2,__zero_reg__
+ 487 01fa 1092 0000 		sts temp+3,__zero_reg__
+ 488               	.L28:
+ 489               	/* epilogue start */
+ 134:main.c        ****   }
+ 135:main.c        **** }
+ 491               	.LM51:
+ 492 01fe FF91      		pop r31
+ 493 0200 EF91      		pop r30
+ 494 0202 BF91      		pop r27
+ 495 0204 AF91      		pop r26
+ 496 0206 9F91      		pop r25
+ 497 0208 8F91      		pop r24
+ 498 020a 7F91      		pop r23
+ 499 020c 6F91      		pop r22
+ 500 020e 5F91      		pop r21
+ 501 0210 4F91      		pop r20
+ 502 0212 3F91      		pop r19
+ 503 0214 2F91      		pop r18
+ 504 0216 0F90      		pop r0
+ 505 0218 0FBE      		out __SREG__,r0
+ 506 021a 0F90      		pop r0
+ 507 021c 1F90      		pop r1
+ 508 021e 1895      		reti
+ 510               	.Lscope4:
+ 512               	.global	__vector_11
+ 514               	__vector_11:
+ 136:main.c        **** 
+ 137:main.c        **** 
+ 138:main.c        **** //function that is called after the defined timer frequency
+ 139:main.c        **** ISR(TIM0_OVF_vect){
+ 516               	.LM52:
+ 517               	.LFBB5:
+ 518 0220 1F92      		push r1
+ 519 0222 0F92      		push r0
+ 520 0224 0FB6      		in r0,__SREG__
+ 521 0226 0F92      		push r0
+ 522 0228 1124      		clr __zero_reg__
+ 523 022a 2F93      		push r18
+ 524 022c 3F93      		push r19
+ 525 022e 4F93      		push r20
+ 526 0230 5F93      		push r21
+ 527 0232 6F93      		push r22
+ 528 0234 7F93      		push r23
+ 529 0236 8F93      		push r24
+ 530 0238 9F93      		push r25
+ 531 023a AF93      		push r26
+ 532 023c BF93      		push r27
+ 533 023e EF93      		push r30
+ 534 0240 FF93      		push r31
+ 535               	/* prologue: Signal */
+ 536               	/* frame size = 0 */
+ 537               	/* stack size = 15 */
+ 538               	.L__stack_usage = 15
+ 140:main.c        ****    counter++;
+ 540               	.LM53:
+ 541 0242 8091 0000 		lds r24,counter
+ 542 0246 9091 0000 		lds r25,counter+1
+ 543 024a A091 0000 		lds r26,counter+2
+ 544 024e B091 0000 		lds r27,counter+3
+ 545 0252 0196      		adiw r24,1
+ 546 0254 A11D      		adc r26,__zero_reg__
+ 547 0256 B11D      		adc r27,__zero_reg__
+ 548 0258 8093 0000 		sts counter,r24
+ 549 025c 9093 0000 		sts counter+1,r25
+ 550 0260 A093 0000 		sts counter+2,r26
+ 551 0264 B093 0000 		sts counter+3,r27
+ 141:main.c        **** 
+ 142:main.c        ****    //call the multiplexer
+ 143:main.c        ****    Multiplexer();
+ 553               	.LM54:
+ 554 0268 00D0      		rcall Multiplexer
+ 555               	/* epilogue start */
+ 144:main.c        **** }
+ 557               	.LM55:
+ 558 026a FF91      		pop r31
+ 559 026c EF91      		pop r30
+ 560 026e BF91      		pop r27
+ 561 0270 AF91      		pop r26
+ 562 0272 9F91      		pop r25
+ 563 0274 8F91      		pop r24
+ 564 0276 7F91      		pop r23
+ 565 0278 6F91      		pop r22
+ 566 027a 5F91      		pop r21
+ 567 027c 4F91      		pop r20
+ 568 027e 3F91      		pop r19
+ 569 0280 2F91      		pop r18
+ 570 0282 0F90      		pop r0
+ 571 0284 0FBE      		out __SREG__,r0
+ 572 0286 0F90      		pop r0
+ 573 0288 1F90      		pop r1
+ 574 028a 1895      		reti
+ 576               	.Lscope5:
+ 578               	.global	start_edge_detection
+ 580               	start_edge_detection:
+ 145:main.c        **** 
+ 146:main.c        **** 
+ 147:main.c        **** //starts edge detection
+ 148:main.c        **** void start_edge_detection(void){
+ 582               	.LM56:
+ 583               	.LFBB6:
+ 584               	/* prologue: function */
+ 585               	/* frame size = 0 */
+ 586               	/* stack size = 0 */
+ 587               	.L__stack_usage = 0
+ 149:main.c        ****     DDRB&=~0x04;    //PB2 is configures for input for counting the edges
+ 589               	.LM57:
+ 590 028c BA98      		cbi 0x17,2
+ 150:main.c        ****     MCUCR|=0x03;    //rising edge detection for INT0
+ 592               	.LM58:
+ 593 028e 85B7      		in r24,0x35
+ 594 0290 8360      		ori r24,lo8(3)
+ 595 0292 85BF      		out 0x35,r24
+ 151:main.c        ****     GIMSK|=0x40;    //enable interrupt/automatic call of ISR(INT0_vect)
+ 597               	.LM59:
+ 598 0294 8BB7      		in r24,0x3b
+ 599 0296 8064      		ori r24,lo8(64)
+ 600 0298 8BBF      		out 0x3b,r24
+ 152:main.c        ****     sei();      //enable all interrupts globally
+ 602               	.LM60:
+ 603               	/* #APP */
+ 604               	 ;  152 "main.c" 1
+ 605 029a 7894      		sei
+ 606               	 ;  0 "" 2
+ 607               	/* #NOAPP */
+ 608 029c 0895      		ret
+ 610               	.Lscope6:
+ 613               	.global	configure_timer0
+ 615               	configure_timer0:
+ 153:main.c        **** }
+ 154:main.c        **** 
+ 155:main.c        **** 
+ 156:main.c        **** //these macros can be used as parameter for the following function
+ 157:main.c        **** #define CALL_FREQUENCY_12800HZ 0x01
+ 158:main.c        **** #define CALL_FREQUENCY_1600HZ 0x02
+ 159:main.c        **** #define CALL_FREQUENCY_200HZ 0x03
+ 160:main.c        **** #define CALL_FREQUENCY_50HZ 0x04
+ 161:main.c        **** #define CALL_FREQUENCY_12dot5HZ 0x05
+ 162:main.c        **** 
+ 163:main.c        **** 
+ 164:main.c        **** //configures the timer call frequency
+ 165:main.c        **** void configure_timer0(unsigned char freq){
+ 617               	.LM61:
+ 618               	.LFBB7:
+ 619               	/* prologue: function */
+ 620               	/* frame size = 0 */
+ 621               	/* stack size = 0 */
+ 622               	.L__stack_usage = 0
+ 166:main.c        ****     TCCR0A=0x00;    //normal mode
+ 624               	.LM62:
+ 625 029e 10BE      		out 0x30,__zero_reg__
+ 167:main.c        ****     TCCR0B=freq;    //prescaler frequency
+ 627               	.LM63:
+ 628 02a0 83BF      		out 0x33,r24
+ 168:main.c        ****     TIMSK0|=0x01;   //enable interrupt/automatic call of ISR(TIM0_OVF_vect)
+ 630               	.LM64:
+ 631 02a2 89B7      		in r24,0x39
+ 632 02a4 8160      		ori r24,lo8(1)
+ 633 02a6 89BF      		out 0x39,r24
+ 169:main.c        ****     sei();      //enable all interrupts globally
+ 635               	.LM65:
+ 636               	/* #APP */
+ 637               	 ;  169 "main.c" 1
+ 638 02a8 7894      		sei
+ 639               	 ;  0 "" 2
+ 640               	/* #NOAPP */
+ 641 02aa 0895      		ret
+ 643               	.Lscope7:
+ 644               		.section	.text.startup,"ax",@progbits
+ 646               	.global	main
+ 648               	main:
+ 170:main.c        **** }
+ 171:main.c        **** 
+ 172:main.c        **** 
+ 173:main.c        **** int main(void){
+ 650               	.LM66:
+ 651               	.LFBB8:
+ 652               	/* prologue: function */
+ 653               	/* frame size = 0 */
+ 654               	/* stack size = 0 */
+ 655               	.L__stack_usage = 0
+ 174:main.c        ****     configure_timer0(CALL_FREQUENCY_1600HZ);   //defines the frequency the timer is called
+ 657               	.LM67:
+ 658 0000 82E0      		ldi r24,lo8(2)
+ 659 0002 00D0      		rcall configure_timer0
+ 175:main.c        **** 
+ 176:main.c        ****     start_edge_detection();         //start edge detection
+ 661               	.LM68:
+ 662 0004 00D0      		rcall start_edge_detection
+ 177:main.c        **** 
+ 178:main.c        ****     DDRA=0xFF;              //all port pins of port A are configured for output
+ 664               	.LM69:
+ 665 0006 8FEF      		ldi r24,lo8(-1)
+ 666 0008 8ABB      		out 0x1a,r24
+ 179:main.c        ****     PORTA=0xFF;             //all port pins of port A are outputting logic 1
+ 668               	.LM70:
+ 669 000a 8BBB      		out 0x1b,r24
+ 670               	.L34:
+ 180:main.c        **** 
+ 181:main.c        ****     while(1){               //do nothing for now and let the ISR functions do their job
+ 182:main.c        **** 
+ 183:main.c        ****     }
+ 672               	.LM71:
+ 673 000c 00C0      		rjmp .L34
+ 675               	.Lscope8:
+ 676               		.comm	temp,4,1
+ 677               		.comm	counter,4,1
+ 678               		.comm	edges_counter,2,1
+ 679               	.global	mux
+ 680               		.section .bss
+ 683               	mux:
+ 684 0000 00        		.zero	1
+ 685               	.global	seconds
+ 686               		.data
+ 689               	seconds:
+ 690 0000 05        		.byte	5
+ 691               	.global	redLED
+ 694               	redLED:
+ 695 0001 01        		.byte	1
+ 696               	.global	blueLED
+ 699               	blueLED:
+ 700 0002 01        		.byte	1
+ 701               	.global	disp2
+ 704               	disp2:
+ 705 0003 01        		.byte	1
+ 706               	.global	disp1
+ 707               		.section .bss
+ 710               	disp1:
+ 711 0001 00        		.zero	1
+ 712               	.global	ziffern
+ 713               		.data
+ 716               	ziffern:
+ 717 0004 02        		.byte	2
+ 718 0005 9E        		.byte	-98
+ 719 0006 24        		.byte	36
+ 720 0007 0C        		.byte	12
+ 721 0008 98        		.byte	-104
+ 722 0009 48        		.byte	72
+ 723 000a 40        		.byte	64
+ 724 000b 1E        		.byte	30
+ 725 000c 00        		.byte	0
+ 726 000d 08        		.byte	8
+ 727 000e FF        		.byte	-1
+ 728 000f 03        		.byte	3
+ 729 0010 9F        		.byte	-97
+ 730 0011 25        		.byte	37
+ 731 0012 0D        		.byte	13
+ 732 0013 99        		.byte	-103
+ 733 0014 49        		.byte	73
+ 734 0015 41        		.byte	65
+ 735 0016 1F        		.byte	31
+ 736 0017 01        		.byte	1
+ 737 0018 09        		.byte	9
+ 738 0019 FF        		.byte	-1
+ 749               		.text
+ 751               	.Letext0:
+ 752               		.ident	"GCC: (GNU) 4.9.2"
+ 753               	.global __do_copy_data
+ 754               	.global __do_clear_bss
+DEFINED SYMBOLS
+                            *ABS*:0000000000000000 main.c
+     /tmp/ccVbAmBD.s:2      *ABS*:000000000000003e __SP_H__
+     /tmp/ccVbAmBD.s:3      *ABS*:000000000000003d __SP_L__
+     /tmp/ccVbAmBD.s:4      *ABS*:000000000000003f __SREG__
+     /tmp/ccVbAmBD.s:5      *ABS*:0000000000000000 __tmp_reg__
+     /tmp/ccVbAmBD.s:6      *ABS*:0000000000000001 __zero_reg__
+     /tmp/ccVbAmBD.s:105    .text:0000000000000000 numberToDisplay
+     /tmp/ccVbAmBD.s:694    .data:0000000000000001 redLED
+     /tmp/ccVbAmBD.s:716    .data:0000000000000004 ziffern
+     /tmp/ccVbAmBD.s:710    .bss:0000000000000001 disp1
+     /tmp/ccVbAmBD.s:704    .data:0000000000000003 disp2
+     /tmp/ccVbAmBD.s:229    .text:000000000000007e Multiplexer
+     /tmp/ccVbAmBD.s:683    .bss:0000000000000000 mux
+     /tmp/ccVbAmBD.s:699    .data:0000000000000002 blueLED
+     /tmp/ccVbAmBD.s:315    .text:00000000000000cc calculateMeasurement
+     /tmp/ccVbAmBD.s:689    .data:0000000000000000 seconds
+                            *COM*:0000000000000004 counter
+                            *COM*:0000000000000004 temp
+                            *COM*:0000000000000002 edges_counter
+     /tmp/ccVbAmBD.s:435    .text:00000000000001a2 __vector_1
+     /tmp/ccVbAmBD.s:514    .text:0000000000000220 __vector_11
+     /tmp/ccVbAmBD.s:580    .text:000000000000028c start_edge_detection
+     /tmp/ccVbAmBD.s:615    .text:000000000000029e configure_timer0
+     /tmp/ccVbAmBD.s:648    .text.startup:0000000000000000 main
+
+UNDEFINED SYMBOLS
+__mulhi3
+__divmodhi4
+__floatunsisf
+__mulsf3
+__divsf3
+__ltsf2
+__subsf3
+__fixsfsi
+__do_copy_data
+__do_clear_bss
